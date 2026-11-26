@@ -2,8 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CONNECTOR_REPLY_MAX_FILES } from '../../shared/connector-action-contract'
-import { redactLocalPaths } from '../../shared/connectors/slack-local-paths'
-import { splitHtmlDocumentFences } from '../../shared/markdown/html-document-fences'
+import { splitSlackHtmlReply } from '../../shared/connectors/slack-html-reply'
 import type { LocalFile } from '../slack/slack-action-files'
 
 // Names Windows reserves for devices, whatever the extension.
@@ -34,8 +33,8 @@ export async function replyWithHtmlPages<T>(
   stage: (files: LocalFile[]) => Promise<string[]>,
   post: (staged: string[], rest: string | undefined) => Promise<T>
 ): Promise<{ files: number; sent: T } | null> {
-  const split = splitHtmlDocumentFences(text)
-  if (split.documents.length > CONNECTOR_REPLY_MAX_FILES) {
+  const split = splitSlackHtmlReply(text)
+  if (!split || split.documents.length > CONNECTOR_REPLY_MAX_FILES) {
     return null
   }
   const staged = await stagePages(split.documents, stage).catch(() => null)
@@ -53,11 +52,10 @@ async function stagePages(
     const files: LocalFile[] = []
     const taken = new Set<string>()
     for (const document of documents) {
-      const page = redactLocalPaths(document)
-      const name = htmlFileName(page, taken)
+      const name = htmlFileName(document, taken)
       const path = join(dir, name)
-      await writeFile(path, page)
-      files.push({ path, name, size: Buffer.byteLength(page) })
+      await writeFile(path, document)
+      files.push({ path, name, size: Buffer.byteLength(document) })
     }
     return await stage(files)
   } finally {
