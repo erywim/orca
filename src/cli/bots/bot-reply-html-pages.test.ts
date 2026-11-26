@@ -10,7 +10,11 @@ import type { OrcaRuntimeService } from '../../main/runtime/orca-runtime'
 import { RpcDispatcher } from '../../main/runtime/rpc/dispatcher'
 import { CONNECTOR_METHODS } from '../../main/runtime/rpc/methods/connectors/connector'
 import type { ConnectorActionArgs } from '../../shared/connector-action-contract'
-import { ConnectorAct } from '../../shared/rpc-contract/connectors/connector-params'
+import {
+  CONNECTOR_REPLY_HTML_PAGE_AS_FILE,
+  ConnectorAct,
+  ConnectorReply
+} from '../../shared/rpc-contract/connectors/connector-params'
 import { dispatch, type HandlerContext } from '../dispatch/dispatch'
 import { RuntimeClientError } from '../runtime/connection/types'
 
@@ -18,7 +22,9 @@ const SESSION = '55555555-5555-4555-8555-555555555555'
 const PRIVATE_PATH = ['', 'Users', 'example', 'project', 'file.ts'].join('/')
 const FENCE = '```'
 const html = (title: string, body: string, eol = '\n') =>
-  ['<!doctype html>', `<html><head><title>${title}</title></head><body>${body}</body></html>`].join(eol)
+  ['<!doctype html>', `<html><head><title>${title}</title></head><body>${body}</body></html>`].join(
+    eol
+  )
 const fence = (page: string, eol = '\n') => [`${FENCE}html`, page, FENCE].join(eol)
 const scriptPage = (key: string, argument: string) =>
   html(
@@ -42,7 +48,10 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function slackThread(failure?: 'stage' | 'post') {
+function slackThread({
+  failure,
+  legacyHost = false
+}: { failure?: 'stage' | 'post'; legacyHost?: boolean } = {}) {
   const bot = { id: 'report-bot', folderWorkspaceId: 'reports' }
   const worktreeId = `folder:${bot.folderWorkspaceId}`
   const host = {
@@ -52,7 +61,7 @@ function slackThread(failure?: 'stage' | 'post') {
   setStructuredAgentSessionHost(host as unknown as StructuredAgentSessionHost)
   const inline: ConnectorReplyBody[] = []
   const formatted: ConnectorReplyBody[] = []
-  const replies: unknown[] = []
+  const replyOptIns: (true | undefined)[] = []
   const uploads: NonNullable<ConnectorActionArgs['upload']>[] = []
   const bytes: Buffer[] = []
   const posts: ConnectorActionArgs[] = []
@@ -99,7 +108,11 @@ function slackThread(failure?: 'stage' | 'post') {
       }
       return { result: { ok: true, result: { queued: failure === 'post' } } }
     }
-    replies.push(params)
+    const { pagesAsFiles } = ConnectorReply.parse(params)
+    replyOptIns.push(pagesAsFiles)
+    if (legacyHost && pagesAsFiles) {
+      throw new RuntimeClientError(CONNECTOR_REPLY_HTML_PAGE_AS_FILE, 'Attach the HTML page')
+    }
     const response = await rpc.dispatch({ id: 'req', authToken: 'test-token', method, params })
     if (!response.ok) {
       throw new RuntimeClientError(response.error.code, response.error.message)
@@ -123,32 +136,38 @@ function slackThread(failure?: 'stage' | 'post') {
       json: false,
       flags: new Map([['text', text], ...flags])
     })
-  return { call, send, replies, inline, formatted, uploads, bytes, posts }
+  return { call, send, replyOptIns, inline, formatted, uploads, bytes, posts }
 }
 
-it('sends the entire original reply and notes inline when one page would change', async () => {
-  const { send, replies, uploads, inline, formatted } = slackThread()
-  const clean = fence(html('Overview', '<p>Nothing to shorten.</p>'))
-  const report = (path: string) => fence(html(path, `<p>Open ${path}.</p>`))
-  const reply = (path: string) => ['Start.', clean, 'Next.', report(path), 'Done.'].join('\n\n')
+it.each([
+  { host: 'current host', legacyHost: false, optIns: [true] },
+  { host: 'older host', legacyHost: true, optIns: [true, undefined] }
+])(
+  'sends the original reply and notes inline when one page would change ($host)',
+  async ({ legacyHost, optIns }) => {
+    const { send, replyOptIns, uploads, inline, formatted } = slackThread({ legacyHost })
+    const clean = fence(html('Overview', '<p>Nothing to shorten.</p>'))
+    const report = (path: string) => fence(html(path, `<p>Open ${path}.</p>`))
+    const reply = (path: string) => ['Start.', clean, 'Next.', report(path), 'Done.'].join('\n\n')
 
-  await send(reply(PRIVATE_PATH), [['note', `${PRIVATE_PATH}:7:Open ${PRIVATE_PATH}`]])
+    await send(reply(PRIVATE_PATH), [['note', `${PRIVATE_PATH}:7:Open ${PRIVATE_PATH}`]])
 
-  expect(uploads).toEqual([])
-  expect(replies).toMatchObject([{ pagesAsFiles: true }])
-  expect(inline).toMatchObject([
-    {
-      text: reply(PRIVATE_PATH),
-      review: { comments: [{ path: PRIVATE_PATH, line: 7, body: `Open ${PRIVATE_PATH}` }] }
-    }
-  ])
-  expect(formatted).toMatchObject([
-    {
-      text: reply('file.ts'),
-      review: { comments: [{ path: 'file.ts', line: 7, body: 'Open file.ts' }] }
-    }
-  ])
-})
+    expect(uploads).toEqual([])
+    expect(replyOptIns).toEqual(optIns)
+    expect(inline).toMatchObject([
+      {
+        text: reply(PRIVATE_PATH),
+        review: { comments: [{ path: PRIVATE_PATH, line: 7, body: `Open ${PRIVATE_PATH}` }] }
+      }
+    ])
+    expect(formatted).toMatchObject([
+      {
+        text: reply('file.ts'),
+        review: { comments: [{ path: 'file.ts', line: 7, body: 'Open file.ts' }] }
+      }
+    ])
+  }
+)
 
 it('routes an opt-in with a script and its matching handler inline immediately', async () => {
   const { call, inline, formatted } = slackThread()
@@ -185,7 +204,7 @@ it('uploads eligible pages with their original bytes and distinct title-based na
 })
 
 it('uses the original inline reply after a staging failure', async () => {
-  const { send, uploads, posts, inline } = slackThread('stage')
+  const { send, uploads, posts, inline } = slackThread({ failure: 'stage' })
   const text = fence(html('Build notes', '<p>All checks passed.</p>'))
 
   await send(text)
@@ -196,7 +215,7 @@ it('uses the original inline reply after a staging failure', async () => {
 })
 
 it('checks an uncertain attachment post using the same id without sending inline', async () => {
-  const { send, uploads, posts, inline } = slackThread('post')
+  const { send, uploads, posts, inline } = slackThread({ failure: 'post' })
   const text = fence(html('Build notes', '<p>All checks passed.</p>'))
 
   await expect(send(text)).rejects.toMatchObject({ code: 'post_uncertain' })
@@ -222,4 +241,4 @@ it('preserves the bytes of an explicitly selected file', async () => {
   expect(uploads).toEqual([{ name: 'report.html', size: document.length }])
   expect(bytes).toEqual([document])
   expect(inline).toEqual([])
-}
+})
