@@ -62,6 +62,7 @@ export type HttpLinkStoreState = HttpLinkBrowserTabState & {
     Pick<
       GlobalSettings,
       | 'openLinksInAppInBackground'
+      | 'openLinksInTab'
       | 'openLinksInApp'
       | 'openLinksInAppModifierInverts'
       | 'activeRuntimeEnvironmentId'

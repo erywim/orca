@@ -20,7 +20,7 @@ export type HttpLinkBrowserTabState = Partial<
     string,
     readonly (Pick<Tab, 'id'> & Partial<Pick<Tab, 'contentType' | 'groupId' | 'lastFocusedAt'>>)[]
   >
-  settings?: Partial<Pick<GlobalSettings, 'openLinksInAppInBackground'>> | null
+  settings?: Partial<Pick<GlobalSettings, 'openLinksInAppInBackground' | 'openLinksInTab'>> | null
   createBrowserTab: (
     worktreeId: string,
     url: string,
@@ -38,6 +38,11 @@ export function resolveHttpLinkBrowserPlacement(
   state: Omit<HttpLinkBrowserTabState, 'createBrowserTab'>,
   worktreeId: string
 ): HttpLinkBrowserPlacement | null {
+  const sourceGroupId = state.activeGroupIdByWorktree?.[worktreeId]
+  // An opted-in tab keeps the link beside its source, even before any browser group exists.
+  if (state.settings?.openLinksInTab === true && sourceGroupId) {
+    return { targetGroupId: sourceGroupId }
+  }
   const visibleBrowser = findVisibleBrowserLinkTarget(state, worktreeId)
   if (visibleBrowser) {
     return visibleBrowser

@@ -1148,6 +1148,13 @@
       },
       "sessionHost": {
         "sshDetail": "Pages for this SSH host open on this computer."
+      },
+      "linkPlacement": {
+        "title": "Open links in a new tab",
+        "description": "Open links from terminals, chat and Markdown as a new tab in the same group instead of a split pane.",
+        "keywordTab": "tab",
+        "keywordSplit": "split",
+        "keywordPlacement": "placement"
       }
     },
     "agents": {

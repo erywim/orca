@@ -81,6 +81,45 @@ function getLinkRoutingBackgroundDescription(t: Translate = translate): string {
   )
 }
 
+export function getLinkRoutingTabPlacementSearchEntry(
+  t: Translate = translate
+): SettingsSearchEntry {
+  return {
+    title: t('settings.browser.linkPlacement.title', 'Open links in a new tab'),
+    description: t(
+      'settings.browser.linkPlacement.description',
+      'Open links from terminals, chat and Markdown as a new tab in the same group instead of a split pane.'
+    ),
+    keywords: [
+      ...translateSearchKeyword(
+        'auto.components.settings.browser.search.2d2d995c58',
+        'browser',
+        undefined,
+        t
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.browser.search.bea27bac4b',
+        'links',
+        undefined,
+        t
+      ),
+      ...translateSearchKeyword('settings.browser.linkPlacement.keywordTab', 'tab', undefined, t),
+      ...translateSearchKeyword(
+        'settings.browser.linkPlacement.keywordSplit',
+        'split',
+        undefined,
+        t
+      ),
+      ...translateSearchKeyword(
+        'settings.browser.linkPlacement.keywordPlacement',
+        'placement',
+        undefined,
+        t
+      )
+    ]
+  }
+}
+
 export function getLinkRoutingBackgroundSearchEntry(t?: Translate): SettingsSearchEntry {
   return {
     title: getLinkRoutingBackgroundTitle(t),

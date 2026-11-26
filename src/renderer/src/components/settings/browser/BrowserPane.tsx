@@ -15,6 +15,7 @@ import { BrowserSearchEngineSetting } from './BrowserSearchEngineSetting'
 import { BrowserLinkRoutingSetting } from './routing/BrowserLinkRoutingSetting'
 import { BrowserLinkRoutingModifierSetting } from './routing/BrowserLinkRoutingModifierSetting'
 import { BrowserLinkRoutingBackgroundSetting } from './routing/BrowserLinkRoutingBackgroundSetting'
+import { BrowserLinkPlacementSetting } from './routing/BrowserLinkPlacementSetting'
 import { BrowserTerminalLinkActionsSetting } from './routing/BrowserTerminalLinkActionsSetting'
 import { BrowserLocalhostWorktreeLabelsSetting } from './routing/BrowserLocalhostWorktreeLabelsSetting'
 import { BrowserClientHostedRemoteSetting } from './routing/BrowserClientHostedRemoteSetting'
@@ -135,6 +136,7 @@ export function BrowserPane({
   const showSitePermissions = matchesSettingsSearch(searchQuery, [browserSearchEntries[11]])
   const showProfileScope = matchesSettingsSearch(searchQuery, [browserSearchEntries[12]])
   const showLinkRoutingBackground = matchesSettingsSearch(searchQuery, [browserSearchEntries[13]])
+  const showLinkPlacement = matchesSettingsSearch(searchQuery, [browserSearchEntries[14]])
   const showPasswords = matchesSettingsSearch(searchQuery, [getBrowserPasswordsSearchEntry(t)])
   // Browser tabs run in this desktop app; the web client has none to free.
   const showMemorySaver =
@@ -324,6 +326,10 @@ export function BrowserPane({
               settings={settings}
               updateSettings={updateSettings}
             />
+          ) : null}
+
+          {showLinkPlacement ? (
+            <BrowserLinkPlacementSetting settings={settings} updateSettings={updateSettings} />
           ) : null}
         </SettingsGroup>
       ) : null}

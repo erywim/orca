@@ -10,7 +10,8 @@ import {
   getBrowserLinkRoutingDescription,
   getLinkRoutingBackgroundSearchEntry,
   getLinkRoutingModifierDescription,
-  getLinkRoutingModifierTitle
+  getLinkRoutingModifierTitle,
+  getLinkRoutingTabPlacementSearchEntry
 } from './routing/browser-link-routing-copy'
 import {
   getBrowserClientHostedRemoteDescription,
@@ -257,6 +258,7 @@ export function getBrowserPaneSearchEntries(
     getBrowserUserAgentSearchEntry(),
     getBrowserSitePermissionsSearchEntry(),
     getBrowserProfileScopeSearchEntry(),
-    getLinkRoutingBackgroundSearchEntry(t)
+    getLinkRoutingBackgroundSearchEntry(t),
+    getLinkRoutingTabPlacementSearchEntry(t)
   ]
 }
