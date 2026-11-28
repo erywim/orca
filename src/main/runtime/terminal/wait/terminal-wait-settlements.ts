@@ -202,11 +202,27 @@ export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithB
     if (!check || !rowsForPane) {
       return false
     }
+    const incarnationId = pty.incarnationId
+    const generation = this.getPtyLifecycleGeneration(terminal.ptyId)
     for (const paneKey of terminal.paneKeys) {
       if (!rowsForPane(paneKey).some(isRecordedIdleAgentStatusRow)) {
         continue
       }
       if ((await check(paneKey).catch(() => null)) !== 'live') {
+        continue
+      }
+      // A live report, respawn, disconnect, or a different row during the probe decides instead.
+      const current = this.ptysById.get(terminal.ptyId)
+      if (
+        current !== pty ||
+        current.incarnationId !== incarnationId ||
+        this.getPtyLifecycleGeneration(terminal.ptyId) !== generation ||
+        !current.connected ||
+        current.connectionId !== null ||
+        current.lastAgentStatus === 'working' ||
+        current.lastAgentStatus === 'permission' ||
+        !rowsForPane(paneKey).some(isRecordedIdleAgentStatusRow)
+      ) {
         continue
       }
       // The process outlived its hook stream: the recorded rest speaks for it now.

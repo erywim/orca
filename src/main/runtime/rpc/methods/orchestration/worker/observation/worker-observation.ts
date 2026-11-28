@@ -4,7 +4,7 @@ import type { WorkerTerminalReleaseRuntime } from '../../../../../orchestration/
 import type { OrchestrationDb } from '../../../../../orchestration/db/orchestration-db'
 import type { OrchestrationFleetWorker } from '../../../../../../../shared/orchestration/fleet/orchestration-fleet-projection'
 import { projectWorkerFleet } from '../fleet/worker-list-projection'
-import { confirmStaleWorkerAgentProcesses } from '../fleet/fleet-agent-process-confirmation'
+import { confirmStaleWorkerAgentProcessesForRuntime } from '../fleet/fleet-agent-process-confirmation'
 import { createSessionWorkerLivenessReader } from '../../../../../orchestration/workers/lifecycle/session-worker-liveness'
 import { inspectSessionWorker } from './session-worker-observation'
 import type {
@@ -217,12 +217,11 @@ export async function projectFleetWorkerPage(
   const now = Date.now()
   const attentionFacts = db.getWorkerAttentionFactsForDispatches([dispatchId], now)
   // worker-show reads the same quiet-idle confirmation worker-list does.
-  const statuses = await confirmStaleWorkerAgentProcesses({
+  const statuses = await confirmStaleWorkerAgentProcessesForRuntime(runtime, {
     rows,
     attentionFacts,
     statuses: runtime.getOrchestrationFleetAgentStatusSnapshot(),
-    now,
-    checkPresence: (paneKey) => runtime.checkHookAgentPresence(paneKey)
+    now
   })
   return projectWorkerFleet({
     rows,

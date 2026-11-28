@@ -3,7 +3,11 @@ import { OrchestrationDb } from '../../../../../orchestration/db/orchestration-d
 import type { FleetAgentStatusEvidence } from '../../../../../../../shared/orchestration/fleet/orchestration-fleet-agent-status-evidence'
 import type { AgentProcessVerdict } from '../../../../../../../shared/agent-status/process/agent-process-presence'
 import { projectWorkerFleet } from './worker-list-projection'
-import { confirmStaleWorkerAgentProcesses } from './fleet-agent-process-confirmation'
+import {
+  confirmStaleWorkerAgentProcesses,
+  WorkerProcessConfirmationCache,
+  WORKER_PROCESS_CONFIRMATION_TTL_MS
+} from './fleet-agent-process-confirmation'
 
 const PANE = 'tab:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222'
 const OTHER_PANE = 'tab:33333333-3333-4333-8333-333333333333:44444444-4444-4444-8444-444444444444'
@@ -85,7 +89,7 @@ function confirm(
   dispatchId: string,
   statuses: readonly FleetAgentStatusEvidence[],
   verdict: AgentProcessVerdict | null = 'live',
-  options: { throws?: boolean } = {}
+  options: { throws?: boolean; cache?: WorkerProcessConfirmationCache } = {}
 ) {
   const rows = db.listWorkerTerminalResources({ dispatchIds: [dispatchId], limit: 1 })
   const checkPresence = vi.fn(async () => {
@@ -101,7 +105,8 @@ function confirm(
       attentionFacts: db.getWorkerAttentionFactsForDispatches([dispatchId], NOW),
       statuses,
       now: NOW,
-      checkPresence
+      checkPresence,
+      cache: options.cache
     })
   }
 }
@@ -125,12 +130,46 @@ describe('a quiet idle worker whose hook clock passed the stale window', () => {
     expect(worker.attention.categories).not.toContain('unverifiable')
   })
 
-  it('stays live for a turn still running behind a long background wait', async () => {
+  it('keeps a stale working turn unverifiable, so a hung turn cannot stay live forever', async () => {
     const dispatchId = idleWorker()
     const working = evidence(dispatchId, { state: 'working' })
-    const statuses = await confirm(dispatchId, [working]).result
+    const { checkPresence, result } = confirm(dispatchId, [working])
+    const statuses = await result
 
+    expect(checkPresence).not.toHaveBeenCalled()
+    expect(statuses[0]?.processConfirmedAt).toBeUndefined()
+    expect(project(dispatchId, statuses).liveness).toMatchObject({
+      verdict: 'unverifiable',
+      reason: 'stale_status'
+    })
+  })
+
+  it('reuses a fresh confirmation instead of probing again on the next read', async () => {
+    const cache = new WorkerProcessConfirmationCache()
+    const dispatchId = idleWorker()
+    const stale = evidence(dispatchId)
+    const first = confirm(dispatchId, [stale], 'live', { cache })
+    await first.result
+    expect(first.checkPresence).toHaveBeenCalledTimes(1)
+
+    const second = confirm(dispatchId, [stale], 'live', { cache })
+    const statuses = await second.result
+    expect(second.checkPresence).not.toHaveBeenCalled()
+    expect(statuses[0]?.processConfirmedAt).toBe(NOW)
     expect(project(dispatchId, statuses).liveness.verdict).toBe('live')
+  })
+
+  it('probes again after the rate-limit window or when the hook row changes', async () => {
+    const cache = new WorkerProcessConfirmationCache()
+    const dispatchId = idleWorker()
+    cache.write(PANE, STALE_AT, NOW - WORKER_PROCESS_CONFIRMATION_TTL_MS - 1)
+    const expired = confirm(dispatchId, [evidence(dispatchId)], 'live', { cache })
+    await expired.result
+    expect(expired.checkPresence).toHaveBeenCalledTimes(1)
+
+    const changed = confirm(dispatchId, [evidence(dispatchId, {}, STALE_AT + 1)], 'live', { cache })
+    await changed.result
+    expect(changed.checkPresence).toHaveBeenCalledTimes(1)
   })
 
   it.each(['exited', 'unverifiable', null] as const)(

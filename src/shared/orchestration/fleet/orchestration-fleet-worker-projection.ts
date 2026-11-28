@@ -42,8 +42,8 @@ export const DURABLE_EXIT_PROOF = {
   terminationReasons: readonly NonNullable<FleetDurableWorker['terminationReason']>[]
 }
 
-/** States a live recorded process may carry past the hook clock: a running turn or one that ended
- *  at rest. A wait or block keeps its own evidence, so permission and question prompts never upgrade. */
+/** A live recorded process may carry an at-rest row past the hook clock. A running turn is left
+ *  alone because a hung turn would otherwise stay live forever; a wait or block keeps its own evidence. */
 export function fleetStatusAcceptsProcessConfirmation(
   evidence: FleetAgentStatusEvidence,
   now: number
@@ -52,7 +52,7 @@ export function fleetStatusAcceptsProcessConfirmation(
     evidence.activity.connectionId === null &&
     !evidence.activity.restoredUnconfirmed &&
     !evidence.activity.providerSessionOnly &&
-    (evidence.activity.state === 'working' || evidence.activity.state === 'done') &&
+    evidence.activity.state === 'done' &&
     now - evidence.clock.at > AGENT_STATUS_STALE_AFTER_MS
   )
 }

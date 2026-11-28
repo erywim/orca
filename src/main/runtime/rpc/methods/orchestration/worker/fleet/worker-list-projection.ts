@@ -16,7 +16,7 @@ import {
 } from '../../../../../orchestration/legacy-remote-home/federated-fleet-snapshot'
 import { ensureSessionWorkerRecords } from '../observation/session-worker-observation'
 import { projectDurableWorker } from './fleet-durable-worker'
-import { confirmStaleWorkerAgentProcesses } from './fleet-agent-process-confirmation'
+import { confirmStaleWorkerAgentProcessesForRuntime } from './fleet-agent-process-confirmation'
 
 export type WorkerListPageParams = {
   run?: string
@@ -86,12 +86,11 @@ export async function projectWorkerListFleet(
     now
   )
   // A quiet idle worker keeps its last hook row; re-probe that row's process before calling it stale.
-  const statuses = await confirmStaleWorkerAgentProcesses({
+  const statuses = await confirmStaleWorkerAgentProcessesForRuntime(runtime, {
     rows,
     attentionFacts,
     statuses: runtime.getOrchestrationFleetAgentStatusSnapshot(),
-    now,
-    checkPresence: (paneKey) => runtime.checkHookAgentPresence(paneKey)
+    now
   })
   const fleet = projectWorkerFleet({
     rows,

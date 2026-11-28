@@ -29,7 +29,7 @@ import {
 import { createSessionWorkerLivenessReader } from '../../../../orchestration/workers/lifecycle/session-worker-liveness'
 import { isStructuredWorkerHandle } from '../../../../../../shared/orchestration/workers/structured-worker-handle'
 import { projectWorkerFleet } from './fleet/worker-list-projection'
-import { confirmStaleWorkerAgentProcesses } from './fleet/fleet-agent-process-confirmation'
+import { confirmStaleWorkerAgentProcessesForRuntime } from './fleet/fleet-agent-process-confirmation'
 import { readCachedFederatedFleetSnapshots } from '../../../../orchestration/legacy-remote-home/federated-fleet-observation-cache'
 import {
   applyFederatedFleetObservations,
@@ -145,12 +145,11 @@ export async function projectDispatchFleet(
   const evidence = read.evidence ?? readDispatchFleetEvidence(runtime)
   await ensureSessionWorkerRecords(runtime, rows)
   // Read a quiet idle worker's recorded process before its old hook row reads as stale.
-  const statuses = await confirmStaleWorkerAgentProcesses({
+  const statuses = await confirmStaleWorkerAgentProcessesForRuntime(runtime, {
     rows,
     attentionFacts,
     statuses: evidence.statuses,
-    now,
-    checkPresence: (paneKey) => runtime.checkHookAgentPresence(paneKey)
+    now
   })
   const fleet = projectWorkerFleet({
     rows,

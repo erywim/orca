@@ -50,6 +50,8 @@ describe('mail to a quiet idle worker whose terminal lost its live status', () =
   async function idleWorkerInbox(options: {
     verdict: AgentProcessVerdict | null
     row?: AgentStatusIpcPayload
+    /** Runs inside the presence probe, so the pane can change while the admission awaits it. */
+    onProbe?: (rows: AgentStatusIpcPayload[]) => void
   }) {
     vi.useFakeTimers()
     const db = new OrchestrationDb(':memory:')
@@ -58,7 +60,13 @@ describe('mail to a quiet idle worker whose terminal lost its live status', () =
       launchAgent: 'codex',
       getAgentStatusSnapshotForPane: (paneKey) =>
         paneKey === PANE_KEY ? rows.filter((row) => row.paneKey === paneKey) : [],
-      checkHookAgentPresence: async (paneKey) => (paneKey === PANE_KEY ? options.verdict : null)
+      checkHookAgentPresence: async (paneKey) => {
+        if (paneKey !== PANE_KEY) {
+          return null
+        }
+        options.onProbe?.(rows)
+        return options.verdict
+      }
     })
     await driveToLiveIdle(runtime)
     // A reattached pane whose title is no longer a live status observation, while the hook row says rest.
@@ -107,6 +115,24 @@ describe('mail to a quiet idle worker whose terminal lost its live status', () =
       verdict: 'live',
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the admission reads only state and clocks.
       row: { ...idleRow(), state: 'waiting' } as AgentStatusIpcPayload
+    })
+    try {
+      expect(await sendDeliveryHoldWarning(runtime, db, mailbox)).toMatchObject({
+        code: 'recipient_delivery_held'
+      })
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(pointerCount(write)).toBe(0)
+    } finally {
+      db.close()
+    }
+  })
+
+  it('keeps the hold when the pane reports work while the probe runs', async () => {
+    const { db, runtime, write, mailbox } = await idleWorkerInbox({
+      verdict: 'live',
+      onProbe: (rows) => {
+        rows[0] = { ...idleRow(), state: 'working' }
+      }
     })
     try {
       expect(await sendDeliveryHoldWarning(runtime, db, mailbox)).toMatchObject({
