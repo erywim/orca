@@ -184,6 +184,7 @@ export abstract class OrcaRuntimeWithBots extends OrcaRuntimeWithLinearCommands 
     ensureStructuredAgentSessionHost: () => this.ensureStructuredAgentSessionHost(),
     // Read per call: the host binds it after this field initializes.
     getAgentStatusSnapshotFn: () => this.getAgentStatusSnapshotFn?.() ?? [],
+    checkHookAgentPresence: (paneKey) => this.checkHookAgentPresence(paneKey),
     showManagedTerminalWorkspace: (...args) => this.showManagedTerminalWorkspace(...args),
     linkStore: () => this.store
   }
