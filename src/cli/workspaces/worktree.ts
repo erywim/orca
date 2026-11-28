@@ -10,6 +10,7 @@ import type {
 import type { CommandHandler } from '../dispatch/dispatch'
 import { printHookWarning, printPreservedBranchWarning } from './worktree-removal-warnings'
 import { requestWorktreeRemoval } from './worktree-removal-request'
+import { decideChildWorktreeRemoval } from './worktree-removal-children'
 import { removeIfFolderWorkspace, setIfFolderWorkspace } from './folder-workspace-mutations'
 import { formatWorktreeList, formatWorktreeShow } from './workspace-format'
 import { printResult } from '../output/command-result-output'
@@ -272,6 +273,15 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
         '--allow-failed-archive-hook waives a FAILED archive hook, but without --run-hooks no hook runs at all. Pass --run-hooks too, or drop the waiver.'
       )
     }
+    // Orca's child workspaces live in their own directories, not under the parent's path, so Git's
+    // remove never takes them. Refuse to leave them behind unparented unless the caller forces it.
+    const childRemoval = decideChildWorktreeRemoval(
+      resolved.result.worktree.childWorktreeIds,
+      flags.get('force') === true
+    )
+    if (childRemoval.kind === 'refuse') {
+      throw new RuntimeClientError('nested_worktrees_present', childRemoval.message)
+    }
     const result = await requestWorktreeRemoval(client, {
       worktree,
       hostId,
@@ -283,7 +293,14 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     })
     printHookWarning(result.result, json)
     printPreservedBranchWarning(result.result, json)
-    printResult(result, json, (value) =>
+    const removalResult =
+      childRemoval.kind === 'detach'
+        ? { ...result.result, detachedChildWorktreeIds: childRemoval.childWorktreeIds }
+        : result.result
+    if (childRemoval.kind === 'detach' && !json) {
+      console.error(childRemoval.warning)
+    }
+    printResult({ ...result, result: removalResult }, json, (value) =>
       // Hosts that predate waiting answer on acceptance.
       value.removing
         ? 'removed: false\nOrca is still deleting the checkout in the background.'
